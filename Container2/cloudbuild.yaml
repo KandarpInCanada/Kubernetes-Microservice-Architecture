@@ -1,0 +1,53 @@
+steps:
+
+  # Initialize kubectl authenticator
+  - id: GKEAuthenticate
+    name: "gcr.io/cloud-builders/gcloud"
+    entrypoint: "bash"
+    args: [
+      "-c",
+      "echo 'Executing Step 1: Getting the credentials for the cluster';\
+    gcloud container clusters get-credentials k8s-kandarp --zone us-central1-c --project cloud-428821; \
+    echo 'Cluster credentials acquired successfully.'"
+    ]
+
+  # Docker Build
+  - id: BuildImage
+    name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args: [
+      "-c",
+      "echo 'Step 2: Building Docker image...'; \
+      docker build -t us-central1-docker.pkg.dev/${PROJECT_ID}/k8-kandarp/k8s-container2:${SHORT_SHA} \
+                   -t us-central1-docker.pkg.dev/${PROJECT_ID}/k8-kandarp/k8s-container2:latest .; \
+      echo 'Docker image built successfully.'"
+    ]
+
+  # Docker Push
+  - id: PushImage
+    name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args: [
+      "-c",
+      "echo 'Step 3: Pushing Docker image...'; \
+      docker push --all-tags us-central1-docker.pkg.dev/${PROJECT_ID}/k8-kandarp/k8s-container2; \
+      echo 'Image pushed successfully.'"
+    ]
+
+  - id: DeployNewImageGKE
+    name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: "bash"
+    args: [
+      "-c",
+      "echo 'Step 3: Updating pod with the latest image...'; \
+    echo 'Project ID: ${PROJECT_ID}'; \
+    kubectl get deployment con2-deployment || kubectl apply -f container2-deployment.yaml; \
+    kubectl set image deployment/con2-deployment k8s-container2=us-central1-docker.pkg.dev/${PROJECT_ID}/k8-kandarp/k8s-container2:${SHORT_SHA}; \
+    echo 'Image update completed successfully.'"
+    ]
+    env: [
+      'CLOUDSDK_COMPUTE_REGION=us-central1-c',
+      'CLOUDSDK_CONTAINER_CLUSTER=k8s-kandarp'
+    ]
+options:
+  logging: CLOUD_LOGGING_ONLY
